@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OrderRefactor.Models;
 using OrderRefactor.Services;
 
 namespace OrderRefactor.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/orders")]
 public class OrderController : ControllerBase
