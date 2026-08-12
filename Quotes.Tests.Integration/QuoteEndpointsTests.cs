@@ -6,12 +6,17 @@ using QuotesApi.Models;
 
 namespace Quotes.Tests.Integration;
 
+[Collection(MsSqlCollection.Name)]
 public class QuoteEndpointsTests
 {
+    private readonly MsSqlContainerFixture _sqlServer;
+
+    public QuoteEndpointsTests(MsSqlContainerFixture sqlServer) => _sqlServer = sqlServer;
+
     [Fact]
     public async Task CreateQuote_ValidRequest_Returns201CreatedWithLocationAndBody()
     {
-        using var host = TestInfrastructure.CreateFreshHost();
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer);
 
         var response = await host.Client.PostAsJsonAsync("/api/quotes", new CreateQuoteRequest { Author = "Ada Lovelace", Text = "A valid quote." });
 
@@ -26,7 +31,7 @@ public class QuoteEndpointsTests
     [Fact]
     public async Task CreateQuote_EmptyAuthorAndText_ReturnsValidationProblemDetailsWithFieldErrors()
     {
-        using var host = TestInfrastructure.CreateFreshHost();
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer);
 
         var response = await host.Client.PostAsJsonAsync("/api/quotes", new CreateQuoteRequest { Author = "", Text = "" });
 
@@ -40,7 +45,7 @@ public class QuoteEndpointsTests
     [Fact]
     public async Task CreateQuote_AuthorExceeding200Chars_ReturnsValidationProblemForAuthorField()
     {
-        using var host = TestInfrastructure.CreateFreshHost();
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer);
         var tooLongAuthor = new string('a', 201);
 
         var response = await host.Client.PostAsJsonAsync("/api/quotes", new CreateQuoteRequest { Author = tooLongAuthor, Text = "A valid quote." });
@@ -53,7 +58,7 @@ public class QuoteEndpointsTests
     [Fact]
     public async Task GetQuoteById_ExistingId_ReturnsOkWithQuote()
     {
-        using var host = TestInfrastructure.CreateFreshHost();
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer);
         var createResponse = await host.Client.PostAsJsonAsync("/api/quotes", new CreateQuoteRequest { Author = "Ada Lovelace", Text = "A valid quote." });
         var created = await createResponse.Content.ReadFromJsonAsync<QuoteResponse>(TestInfrastructure.Json);
 
@@ -68,7 +73,7 @@ public class QuoteEndpointsTests
     [Fact]
     public async Task GetQuoteById_NonExistentId_ReturnsNotFoundProblemDetails()
     {
-        using var host = TestInfrastructure.CreateFreshHost();
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer);
 
         var response = await host.Client.GetAsync("/api/quotes/999");
 
@@ -81,7 +86,7 @@ public class QuoteEndpointsTests
     [Fact]
     public async Task GetQuotes_DefaultPaging_ReturnsAllCreatedQuotesOnFirstPage()
     {
-        using var host = TestInfrastructure.CreateFreshHost();
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer);
         await host.Client.PostAsJsonAsync("/api/quotes", new CreateQuoteRequest { Author = "Author One", Text = "Quote one." });
         await host.Client.PostAsJsonAsync("/api/quotes", new CreateQuoteRequest { Author = "Author Two", Text = "Quote two." });
         await host.Client.PostAsJsonAsync("/api/quotes", new CreateQuoteRequest { Author = "Author Three", Text = "Quote three." });
@@ -98,7 +103,7 @@ public class QuoteEndpointsTests
     [Fact]
     public async Task GetQuotes_SizeExceeding100_IsClampedTo100InResponse()
     {
-        using var host = TestInfrastructure.CreateFreshHost();
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer);
 
         var response = await host.Client.GetAsync("/api/quotes?page=1&size=500");
 
@@ -110,7 +115,7 @@ public class QuoteEndpointsTests
     [Fact]
     public async Task GetQuotes_NonPositivePage_DefaultsToPageOne()
     {
-        using var host = TestInfrastructure.CreateFreshHost();
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer);
 
         var response = await host.Client.GetAsync("/api/quotes?page=0&size=10");
 
@@ -122,7 +127,7 @@ public class QuoteEndpointsTests
     [Fact]
     public async Task DeleteQuote_ExistingId_Returns204AndSubsequentGetReturns404()
     {
-        using var host = TestInfrastructure.CreateFreshHost();
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer);
         var createResponse = await host.Client.PostAsJsonAsync("/api/quotes", new CreateQuoteRequest { Author = "Ada Lovelace", Text = "A valid quote." });
         var created = await createResponse.Content.ReadFromJsonAsync<QuoteResponse>(TestInfrastructure.Json);
 
@@ -136,7 +141,7 @@ public class QuoteEndpointsTests
     [Fact]
     public async Task DeleteQuote_NonExistentId_ReturnsNotFoundProblemDetails()
     {
-        using var host = TestInfrastructure.CreateFreshHost();
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer);
 
         var response = await host.Client.DeleteAsync("/api/quotes/999");
 
@@ -154,7 +159,7 @@ public class QuoteEndpointsTests
     public async Task CreateQuote_EvenWithFakeClockOverridden_CreatedAtStillReflectsRealSystemTime()
     {
         var fakeClock = new FixedClock(new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero));
-        using var host = TestInfrastructure.CreateFreshHost(fakeClock);
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer, fakeClock);
         var beforeCreate = DateTime.UtcNow;
 
         var response = await host.Client.PostAsJsonAsync("/api/quotes", new CreateQuoteRequest { Author = "Ada Lovelace", Text = "A valid quote." });

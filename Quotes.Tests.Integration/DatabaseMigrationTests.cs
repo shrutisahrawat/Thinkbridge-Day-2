@@ -5,25 +5,29 @@ using QuotesApi.Data;
 
 namespace Quotes.Tests.Integration;
 
+[Collection(MsSqlCollection.Name)]
 public class DatabaseMigrationTests
 {
+    private readonly MsSqlContainerFixture _sqlServer;
+
+    public DatabaseMigrationTests(MsSqlContainerFixture sqlServer) => _sqlServer = sqlServer;
+
     [Fact]
-    public async Task WebApplicationFactoryStartup_OnFreshSqliteDatabase_AppliesBothRealEfMigrations()
+    public async Task WebApplicationFactoryStartup_OnFreshSqlServerDatabase_AppliesTheSqlServerMigration()
     {
-        using var host = TestInfrastructure.CreateFreshHost();
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer);
         using var scope = host.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<QuotesDbContext>();
 
         var appliedMigrations = await db.Database.GetAppliedMigrationsAsync();
 
-        appliedMigrations.Should().Contain("20260810100705_InitialCreate");
-        appliedMigrations.Should().Contain("20260810175205_AddCollections");
+        appliedMigrations.Should().Contain("20260812150023_InitialCreate");
     }
 
     [Fact]
-    public async Task WebApplicationFactoryStartup_OnFreshSqliteDatabase_CreatesQuotesAndCollectionsTables()
+    public async Task WebApplicationFactoryStartup_OnFreshSqlServerDatabase_CreatesQuotesAndCollectionsTables()
     {
-        using var host = TestInfrastructure.CreateFreshHost();
+        using var host = await TestInfrastructure.CreateFreshHost(_sqlServer);
         using var scope = host.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<QuotesDbContext>();
 
