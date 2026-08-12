@@ -1,213 +1,135 @@
-# Thinkbridge_Shruti_Sahrawat
-# Thinkbridge Backend Development Assignment
-**Days 1, 2, and 3 — Complete Backend Architecture & Authentication**
+# Thinkbridge Backend Assignment — Shruti Sahrawat
+
+Days 1–3. All code in this repository. **139 tests passing** across three test projects.
+
+| Suite | Tests | Runtime |
+|---|---|---|
+| `OrderRefactor.Tests` | 21 | ~2s |
+| `Quotes.Tests.Unit` | 95 | ~0.3s |
+| `Quotes.Tests.Integration` | 23 | ~14s (real SQL Server 2022 container) |
+
+Two applications: **QuotesApi** (minimal API, DDD aggregate) and **OrderRefactor** (layered refactor, JWT auth, Entra ID).
 
 ---
 
-## 📋 Overview
+## Day 1 — Foundations
 
-This assignment covers three days of backend development, building from foundations through advanced authentication patterns.
+**Piece 1 — Hello in two languages**
+[`hello-cs/Program.cs`](hello-cs/Program.cs) · [`hello-ts/hello.ts`](hello-ts/hello.ts)
+C# needs a `.csproj` and an SDK before it will run anything; Node 24 executes TypeScript directly with no build step and no config file. The contrast is the point — one runtime asks you to declare structure up front, the other asks for nothing.
 
-| Day | Focus | Status |
-|-----|-------|--------|
-| **Day 1** | Foundations: Hello, APIs, Refactoring, DDD Aggregates | ✅ Complete |
-| **Day 2** | Advanced Architecture: DI, async/await, JWT Auth, Refresh Tokens | ✅ Complete |
-| **Day 3** | Enterprise Auth: Entra ID Integration with Dual Schemes | ✅ Complete |
+**Piece 2 — Minimal ASP.NET Core API**
+[`QuotesApi/Extensions/EndpointExtensions.cs`](QuotesApi/Extensions/EndpointExtensions.cs) · [`QuotesApi/Repositories/QuoteRepository.cs`](QuotesApi/Repositories/QuoteRepository.cs)
+Four endpoints on `/api/quotes` — paged list, create, get by id, delete. EF Core + SQLite with migrations applied at startup, scoped `IQuoteRepository` via DI, `ValidationProblemDetails` on invalid input, `CancellationToken` flowing into every EF query, structured logging via `ILogger<T>`, and `ProblemDetails` from [exception middleware](QuotesApi/Middleware/ExceptionHandlingMiddleware.cs). `Program.cs` stays under 120 lines by splitting into `AddInfrastructure()` and `MapQuoteEndpoints()` extension methods.
 
----
+**Piece 3 — Refactor a god-method controller**
+Before: [`OrderRefactor/Original/OrderController.cs`](OrderRefactor/Original/OrderController.cs) — the ~250-line original, saved unmodified.
+Prompt that generated it: [`OrderRefactor/Original/PROMPT.md`](OrderRefactor/Original/PROMPT.md)
+Analysis: [`OrderRefactor/REFACTOR_NOTES.md`](OrderRefactor/REFACTOR_NOTES.md) — 10+ distinct smells, each with its consequence and intended fix, written before touching a line of code.
+After: [`Controllers/OrderController.cs`](OrderRefactor/Controllers/OrderController.cs) → [`Services/OrderService.cs`](OrderRefactor/Services/OrderService.cs) → [`Repositories/`](OrderRefactor/Repositories) — split into layers wired by DI, async end-to-end with cancellation, typed return shapes, and empty catches replaced with narrow handlers that log and rethrow.
 
-## 📚 Day 1 — Foundations (5 Pieces)
+**Piece 4 — Real AI-assisted work**
+[`AI_REFLECTION.md`](AI_REFLECTION.md) — where Claude Code helped, where it over-engineered and I pushed back, and where Copilot suggested something subtly wrong.
 
-### [Piece 1: Hello in Two Languages](https://github.com/shrutisahrawat/Thinkschool)
-Compare C# (.NET 10) vs TypeScript (Node 24) runtimes
-- Build: .csproj vs nothing
-- Runtime: .NET SDK vs native Node
-- **Concepts:** Language fundamentals, runtime comparison
-
-### [Piece 2: Minimal ASP.NET Core API](https://github.com/shrutisahrawat/quotes-api-day1)
-First real API with EF Core + SQLite
-- **Endpoints:** GET /api/quotes, POST /api/quotes, GET /api/quotes/{id}, DELETE /api/quotes/{id}
-- **Features:** Dependency Injection, validation, error handling
-- **Concepts:** Minimal APIs, EF Core fundamentals, async/await
-
-### [Piece 3: Refactor God-Method](https://github.com/shrutisahrawat/Order-Refactor-Day1)
-Refactor a legacy controller into layered architecture
-- **Before:** Mixed business logic + data access + validation
-- **After:** Controller → Service → Repository layers
-- **Concepts:** Separation of concerns, testability, DI design
-
-### [Piece 4: Real AI-Assisted Work](https://github.com/shrutisahrawat/Order-Refactor-Day1)
-Use Claude Code to refactor messy code into patterns
-- AI generates the offending code
-- You review and refactor with Claude's help
-- Document the process with REFACTOR_NOTES.md
-- **Concepts:** Code review discipline, AI-assisted development
-
-### [Piece 5: Build Real Aggregate](https://github.com/shrutisahrawat/Day1-Build-a-real-aggregate)
-Domain-Driven Design (DDD) aggregate pattern
-- **Entity:** Collection with Id, Name, OwnerId, Items
-- **Value Object:** CollectionItem (immutable, QuoteId + AddedAt)
-- **Invariants:** Name length, max 50 items, no duplicates
-- **Repository:** ICollectionRepository with owned types
-- **Concepts:** DDD basics, aggregate roots, invariant enforcement
+**Piece 5 — Build a real aggregate**
+[`QuotesApi/Domain/Collection.cs`](QuotesApi/Domain/Collection.cs) · [`QuotesApi/Domain/CollectionItem.cs`](QuotesApi/Domain/CollectionItem.cs)
+An aggregate root that enforces its own invariants: name 3–80 characters, maximum 50 items, no duplicate quote IDs, positive quote ID required. `CollectionItem` is an immutable value object mapped as an EF owned type. Every mutation goes through `AddItem`/`RemoveItem`, which throw rather than letting callers touch the collection directly — so the aggregate is consistent after every operation, not merely by convention. Endpoints: [`CollectionsController.cs`](QuotesApi/Controllers/CollectionsController.cs).
 
 ---
 
-## 🔐 Day 2 — Advanced Architecture & Authentication (6 Pieces)
+## Day 2 — Architecture and Authentication
 
-**Repository:** [Thinkbridge-Day-2](https://github.com/shrutisahrawat/Thinkbridge-Day-2)
+**Piece 1 — Dependency injection at depth** *(partial — see note)*
+[`QuotesApi/Services/IClock.cs`](QuotesApi/Services/IClock.cs) · [`SystemClock.cs`](QuotesApi/Services/SystemClock.cs), registered as a singleton in [`Program.cs`](QuotesApi/Program.cs). Repositories and `DbContext` scoped; `DiscountCalculator` transient.
+**Known gap:** `IClock` is registered and covered by fake-clock tests against the `Quote.Create(author, text, clock)` overload, but `EndpointExtensions` still calls the two-argument overload, so the clock is never consulted on the live request path. `CollectionItem` and `AuthController` also still call `DateTime.UtcNow` directly. The abstraction exists and is testable; it is not yet threaded through production.
 
-### Piece 1: Dependency Injection at Depth
-Understanding DI lifetimes: Transient, Scoped, Singleton
-- Added IClock abstraction (for testable datetime)
-- Registered with appropriate lifetimes
-- **Concepts:** DI container, service lifetimes, testability
+**Piece 2 — async/await with cancellation through layers**
+`CancellationToken` is the last parameter on every I/O method and flows controller → service → repository → EF. See [`IOrderRepository.cs`](OrderRefactor/Repositories/IOrderRepository.cs) and [`QuoteRepository.cs`](QuotesApi/Repositories/QuoteRepository.cs). Cancellation is tested, not assumed: [`CollectionsControllerCancellationTests.cs`](OrderRefactor.Tests/CollectionsControllerCancellationTests.cs).
 
-### Piece 2: async/await with Cancellation Through Layers
-Proper cancellation token flow
-- Every async method takes `CancellationToken` as last parameter
-- Tokens flow from controller → service → repository → EF
-- Test cancellation mid-request
-- **Concepts:** async patterns, cancellation, deadlock avoidance
+**Piece 3 — Test the domain layer**
+[`OrderRefactor.Tests/CollectionDomainTests.cs`](OrderRefactor.Tests/CollectionDomainTests.cs), extended considerably in [`Quotes.Tests.Unit/CollectionTests.cs`](Quotes.Tests.Unit/CollectionTests.cs) — every `Collection` invariant including the 49th/50th/51st item boundary. Pure and fast: no DbContext, no fixtures, no setup methods.
 
-### Piece 3: Test the Domain Layer
-Unit testing with xUnit + Fluent Assertions
-- Tests for Collection aggregate invariants
-- Empty name throws
-- Name > 80 chars throws
-- Max 50 items enforced
-- No duplicate QuoteIds
-- **Concepts:** xUnit, Fluent Assertions, testing pyramid
+**Piece 4 — AI-assisted refactor: anemic to rich**
+[`QuotesApi/Models/Quote.cs`](QuotesApi/Models/Quote.cs) — private setters, private constructor, a static `Quote.Create` factory validating author (1–200 chars) and text (1–1000 chars) with trimming, and `SoftDelete()` instead of a publicly mutable flag. Rationale and the bug the anemic version would have shipped: [`WHY.md`](WHY.md). Tests: [`Quotes.Tests.Unit/QuoteTests.cs`](Quotes.Tests.Unit/QuoteTests.cs).
 
-### Piece 4: AI-Assisted Refactor — Anemic to Rich
-Refactor Quote entity from simple properties to rich domain model
-- Add invariants: Text (1-1000 chars), Author (1-200 chars)
-- Static factory: `Quote.Create(author, text)`
-- **Concepts:** Rich domain models, invariants, factory methods
+**Piece 5 — JWT auth with my own issuer**
+[`OrderRefactor/Controllers/AuthController.cs`](OrderRefactor/Controllers/AuthController.cs) — `POST /api/auth/login` returns `access_token`, `refresh_token`, and `expires_in`. HS256, signed with a 256-bit key read from `IConfiguration`, never hardcoded.
 
-### Piece 5: Implement JWT Auth (Your Own Issuer)
-Custom JWT authentication
-- **Login endpoint:** POST /api/auth/login → access_token + refresh_token
-- Users table with bcrypt password hashing
-- JWT signed with HS256 + 256-bit key
-- Protected endpoints with `[Authorize]`
-- **Concepts:** JWT, authentication, password hashing
+**Piece 6 — Refresh tokens with rotation and reuse detection**
+Same file. Refresh tokens are stored hashed, never in plaintext ([`Models/RefreshToken.cs`](OrderRefactor/Models/RefreshToken.cs): `TokenHash`, `UserId`, `ExpiresAt`, `RevokedAt`, `ReplacedByToken`). Every refresh rotates the pair and marks the old token replaced. **Presenting an already-rotated token revokes the entire family for that user** and forces re-authentication — so a leaked token cannot be used twice, and the theft is detected rather than silently exploited.
+Proven end-to-end in [`RefreshTokenTests.cs`](OrderRefactor.Tests/RefreshTokenTests.cs): log in, refresh once, replay the spent token → 401, then confirm the legitimate user's current token is dead too.
 
-### Piece 6: Refresh Tokens with Rotation & Reuse Detection
-Security-hardened token refresh
-- **RefreshTokens table:** TokenHash, UserId, ExpiresAt, RevokedAt, ReplacedByToken
-- **On refresh:** Validate → generate new pair → mark old as replaced
-- **Reuse detection:** If old token replayed → revoke entire family
-- Security event logging
-- **Concepts:** Token rotation, leak detection, family revocation
 
----
 
-## 🌐 Day 3 — Enterprise Authentication (Entra ID)
+## Day 3 — Enterprise Auth and Testing
 
-**Repository:** [Thinkbridge-Day-2](https://github.com/shrutisahrawat/Thinkbridge-Day-2) (latest commits)
+**Wire Entra ID as the identity provider** *(config complete, live token untested — see note)*
+[`OrderRefactor/Program.cs`](OrderRefactor/Program.cs) registers two bearer schemes behind a policy scheme:
+Request with Bearer token
+↓
+PolicyScheme reads the issuer claim (reads only — no validation yet)
+↓
+iss == "OrderRefactorIssuer"?
+├─ yes → InternalJwt symmetric key, my own tokens
+└─ no → EntraJwt Microsoft's public keys, fetched from Authority
+↓
+[Authorize] resolves as normal — controllers unchanged
 
-### What You Implemented
+Entra configuration (`TenantId`, `ClientId`, `Audience`) lives in `appsettings.json`; these are public identifiers, not secrets. Authority is `https://login.microsoftonline.com/{tenant}/v2.0`. No client secret is needed anywhere — an API that only validates tokens uses Microsoft's published signing keys.
+**Known gap:** the application is registered in Entra and the code path is in place, but I could not obtain a real Entra access token to verify end-to-end. The institutional tenant rejected the `access_as_user` scope grant (`AADSTS65005`). The internal JWT path is verified working; the Entra branch is unverified against a live token.
 
-**Problem:** Internal JWT is fine for APIs. For customer-facing apps, delegate auth to Microsoft Entra ID.
+**Authorization policies and claims**
+`AdminOnly` (claim-based) and `CanEditOwnOrders` (custom assertion) defined in [`Program.cs`](OrderRefactor/Program.cs), applied at [`OrderController.CreateOrder`](OrderRefactor/Controllers/OrderController.cs). Authentication answers *who you are*; policies answer *what you may do*. Roles are claims that change; policies encode rules that don't.
 
-**Solution:** Dual authentication scheme
-- **Internal JWT** → for backend-to-backend calls (Day 2 auth)
-- **Entra JWT** → for SPA/customer apps (new)
-- **PolicyScheme** → reads token issuer, routes to correct validator
+**Lock down the API end-to-end**
+[`OrderControllerTests.cs`](OrderRefactor.Tests/OrderControllerTests.cs) + [`RefreshTokenTests.cs`](OrderRefactor.Tests/RefreshTokenTests.cs) — 21 tests: anonymous → 401, authenticated but wrong policy → 403, correct policy → 201, expired token → 401, malformed token → 401, revoked refresh chain → 401.
 
-### Changes Made
+**The testing pyramid in real terms**
+Reflected in the actual shape of the suites: 95 unit tests at ~3ms each, 44 integration tests at ~200ms–600ms, no end-to-end layer. The lesson that stuck is that the pyramid is about *time*, not test count — 23 integration tests consume more wall-clock than 95 unit tests, so the ratio that matters is the one on the stopwatch.
 
-**File: `appsettings.json`** - Added Entra configuration block with Tenant ID, Client ID, Audience
+**xUnit with FluentAssertions**
+[`Quotes.Tests.Unit/`](Quotes.Tests.Unit) — 95 tests in ~0.3s. One test class per production class, `Method_StateUnderTest_ExpectedBehavior` naming, explicit AAA in every test, no `SetUp` hiding arrangement, `[Theory]`/`[InlineData]` for boundaries. NSubstitute for `IOrderRepository`, `IConfiguration`, and `ILogger<T>`.
 
-**File: `Program.cs`**
-- Registered `InternalJwt` scheme (Day 2 logic unchanged)
-- Registered `EntraJwt` scheme (validates against Microsoft's public keys)
-- Registered `PolicyScheme` traffic cop (routes by issuer claim)
+**Integration tests with WebApplicationFactory**
+[`Quotes.Tests.Integration/`](Quotes.Tests.Integration) — 23 tests booting the real application: real middleware pipeline, real DI graph, real EF. A fresh database and `HttpClient` per test, no shared state between tests. `ProblemDetails` and `ValidationProblemDetails` response shapes are asserted, not just status codes.
 
-### Testing
-
-✅ **Internal JWT:** Confirmed working (200 OK with valid token)
-✅ **Code:** Ready for Entra token validation
-✅ **Build:** Succeeds
-✅ **Day 2:** Completely preserved (no breaking changes)
-
-### Key Concepts
-
-1. **Issuer Claim** — Identifies who created the token
-2. **Authority** — Base URL for fetching validation keys
-3. **Policy Scheme** — Meta-scheme that selects the real scheme
-4. **Symmetric vs Asymmetric Keys**
-5. **Dual Authentication** — Supporting multiple token sources
+**Real SQL Server in CI with Testcontainers**
+[`MsSqlContainerFixture.cs`](Quotes.Tests.Integration/MsSqlContainerFixture.cs) — one SQL Server 2022 container per assembly run via `IAsyncLifetime` + `ICollectionFixture`, with each test getting its own database on that shared container. The suite goes 2s → 14s: the honest cost of testing against a real engine.
+The SQLite migrations could not be replayed against SQL Server. They bake in literal `TEXT` column types and a `Sqlite:Autoincrement` annotation that SQL Server silently ignores, producing a table with no `IDENTITY` — so every insert fails. The fix is not translation but a separate SQL-Server-native migration set inside the test project ([`Migrations/SqlServer/`](Quotes.Tests.Integration/Migrations/SqlServer)), wired via `MigrationsAssembly`. Zero production changes; the SQLite app still runs unmodified.
 
 ---
 
-## 🏗️ Architecture Evolution
-Day 1: Single-layered
-├─ hello-cs, hello-ts (language comparison)
-├─ QuotesApi (basic API)
-├─ OrderRefactor (layered refactor)
-└─ DDD aggregate pattern
+## Concept cards
 
-Day 2: Enterprise-ready
-├─ DI at depth (lifetimes)
-├─ Async/cancellation patterns
-├─ Rich domain models
-├─ JWT authentication
-└─ Secure refresh tokens
+Three cards were conceptual rather than build tasks. Where each one landed in the code:
 
-Day 3: Cloud-native
-├─ Dual auth schemes
-├─ Entra ID integration
-├─ PolicyScheme routing
-└─ Zero breaking changes
+**Day 1 — Tools check.** .NET SDK 10.0.302, Node 24 (runs `hello.ts` natively, no `tsc` step), Git, VS Code with C# Dev Kit, Copilot, Claude Code — the last used for the Day 1 refactor, the Day 2 rich-model rewrite, and three Day 3 test projects.
+
+**Day 2 — Entity, value object, aggregate root.** Demonstrated in [`QuotesApi/Domain/`](QuotesApi/Domain): `Collection` is the aggregate root and the consistency boundary; `CollectionItem` is an immutable value object mapped as an EF owned type; `ICollectionRepository` is one repository per root rather than per entity; and all mutation goes through the root, which throws on invariant violation instead of letting callers reach inside.
+
+**Day 2 — JWT, OAuth2, OIDC.** Applied in [`AuthController.cs`](OrderRefactor/Controllers/AuthController.cs) — self-issued JWTs, 15-minute access tokens, 7-day single-use rotating refresh tokens, which is exactly the shape the card prescribes for an API like this — and in [`Program.cs`](OrderRefactor/Program.cs), where a policy scheme routes between my own issuer and an OIDC provider (Entra ID) on the issuer claim.
 
 ---
 
-## 📁 Repository Links
+## Two bugs these tests caught
 
-| Day | Repository | Main Project | Status |
-|-----|-----------|--------------|--------|
-| **Day 1** | [Thinkschool](https://github.com/shrutisahrawat/Thinkschool) | hello-cs, hello-ts | ✅ |
-| **Day 1** | [quotes-api-day1](https://github.com/shrutisahrawat/quotes-api-day1) | QuotesApi | ✅ |
-| **Day 1** | [Order-Refactor-Day1](https://github.com/shrutisahrawat/Order-Refactor-Day1) | OrderRefactor | ✅ |
-| **Day 1** | [Day1-Build-a-real-aggregate](https://github.com/shrutisahrawat/Day1-Build-a-real-aggregate) | QuotesApi + Collection | ✅ |
-| **Day 2 & 3** | [Thinkbridge-Day-2](https://github.com/shrutisahrawat/Thinkbridge-Day-2) | OrderRefactor | ✅ |
+**A startup bug that would have broken any clean deployment.** All 23 integration tests failed on their first run — inside `Program.cs`, not in test code. `Quote.IsDeleted` existed on the model but had never been captured in a migration, so `Database.Migrate()` threw `PendingModelChangesWarning` against any fresh database. My local `quotes.db` predated the drift, so it had never surfaced in development. A clean clone would not have booted. Fixed in [`20260812113000_AddQuoteIsDeleted.cs`](QuotesApi/Migrations/20260812113000_AddQuoteIsDeleted.cs).
+
+**A regression I introduced myself, caught within the hour.** Adding `[Authorize(Policy = "AdminOnly")]` to `CreateOrder` immediately broke an existing Day 2 test that posted without a token — it started returning 401 before reaching the logic under test. The suite caught it the same hour I wrote it. I fixed the test, not the policy.
 
 ---
 
-## 🚀 Running the Code
+## Running it
 
-### Day 1 — Hello World
 ```bash
-cd hello-cs && dotnet run
-cd hello-ts && node hello.ts
+dotnet test OrderRefactor.Tests        # 21
+dotnet test Quotes.Tests.Unit          # 95
+dotnet test Quotes.Tests.Integration   # 23 — requires Docker
 ```
 
-### Day 2 & 3 — OrderRefactor API
-```bash
-cd OrderRefactor
-dotnet build
-dotnet run
-# API runs on http://localhost:5021
-```
+`.github/workflows/ci.yml` runs all three projects as separate jobs.
+**The CI run currently fails.** `actions/checkout` does not fetch submodules by default and this repository was assembled from several, so the runner's checkout is incomplete. All 139 tests pass locally, including the 23 against a real SQL Server 2022 container.
 
-### Test Internal JWT
-```powershell
-# Login
-$body = @{email="admin@quotes.com"; password="SecurePassword123"} | ConvertTo-Json
-Invoke-WebRequest -Uri "http://localhost:5021/api/auth/login" `
-  -Method POST -ContentType "application/json" -Body $body -UseBasicParsing
-```
-Day 3 — Task 2: Authorization Policies and Claims
-
-✅ Implementation:
-- Added two policies in Program.cs: AdminOnly + CanEditOwnOrders
-- Applied "AdminOnly" policy to CreateOrder endpoint
-- Code: https://github.com/shrutisahrawat/Thinkbridge-Day-2/blob/main/OrderRefactor/Controllers/OrderController.cs
-- Commit: a2d13c8
-
-When POST /api/orders is called without admin claim → 403 Forbidden
 
 
 
