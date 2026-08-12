@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -14,9 +15,20 @@ builder.Services.AddInfrastructure(builder.Configuration);
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is missing");
 var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+// Define scheme names
+const string InternalSchemeName = "InternalJwt";
+const string EntraSchemeName = "EntraJwt";
+const string PolicySchemeName = "PolicyScheme";
+
+var azureAdTenantId = builder.Configuration["AzureAd:TenantId"];
+var azureAdClientId = builder.Configuration["AzureAd:ClientId"];
+var azureAdAudience = builder.Configuration["AzureAd:Audience"];
+
+// Register two schemes + policy scheme
+builder.Services.AddAuthentication(PolicySchemeName)
+    .AddJwtBearer(InternalSchemeName, options =>
     {
+        // Your Day 2 logic, unchanged
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -26,6 +38,49 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(keyBytes)
+        };
+    })
+    .AddJwtBearer(EntraSchemeName, options =>
+    {
+        // Entra (Azure AD) configuration
+        options.Authority = $"https://login.microsoftonline.com/{azureAdTenantId}/v2.0";
+        options.Audience = azureAdAudience;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateAudience = true,
+            ValidateIssuer = true,
+            ValidateLifetime = true
+        };
+    })
+    .AddPolicyScheme(PolicySchemeName, "Policy Scheme", options =>
+    {
+        // This scheme peeks at the token and forwards to either InternalJwt or EntraJwt
+        options.ForwardDefaultSelector = context =>
+        {
+            var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
+            if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+                return InternalSchemeName; // Default fallback
+
+            var token = authHeader.Substring("Bearer ".Length).Trim();
+            
+            try
+            {
+                var handler = new JwtSecurityTokenHandler();
+                var jwt = handler.ReadJwtToken(token);
+                var issuer = jwt.Issuer;
+
+                if (issuer == "OrderRefactorIssuer")
+                    return InternalSchemeName;
+                
+                if (issuer?.StartsWith("https://login.microsoftonline.com/") == true)
+                    return EntraSchemeName;
+            }
+            catch
+            {
+                // If token is malformed or unreadable, let default handler deal with it
+            }
+
+            return InternalSchemeName; // Safe default
         };
     });
 
