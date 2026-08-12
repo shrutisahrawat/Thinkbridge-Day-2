@@ -200,45 +200,7 @@ Invoke-WebRequest -Uri "http://localhost:5021/api/auth/login" `
   -Method POST -ContentType "application/json" -Body $body -UseBasicParsing
 ```
 
----
 
-## ✅ Checklist
 
-- ✅ Day 1: 5 pieces complete with documentation
-- ✅ Day 2: 6 pieces complete with DDD + JWT + refresh tokens
-- ✅ Day 3: Entra ID dual-scheme authentication configured
-- ✅ Build: All projects compile successfully
-- ✅ Tests: Domain layer tests pass
-- ✅ Git: Clean commit history
-- ✅ Documentation: README files for each day
 
----
-
-## 📚 Key Technologies
-
-| Concept | Technology |
-|---------|-----------|
-| Language | C# 10, TypeScript, .NET 10 |
-| Web Framework | ASP.NET Core Minimal APIs |
-| Database | SQLite + Entity Framework Core |
-| Authentication | JWT (custom + Entra ID) |
-| Testing | xUnit, Fluent Assertions |
-| Architecture | Layered + DDD |
-
----
-
-## 🎓 Learning Outcomes
-
-By the end of this assignment, you understand:
-
-1. **.NET Fundamentals** — Projects, dependencies, async patterns
-2. **Layered Architecture** — Controllers, Services, Repositories
-3. **Domain-Driven Design** — Aggregates, invariants, rich models
-4. **Dependency Injection** — Lifetimes, container configuration
-5. **Async/Cancellation** — Proper token flow through layers
-6. **Testing Pyramid** — Unit → integration tests
-7. **JWT Authentication** — Custom issuers, token validation
-8. **Secure Refresh Tokens** — Rotation, leak detection, family revocation
-9. **Enterprise Authentication** — Dual schemes, Entra ID integration
-10. **Code Review Discipline** — Reading diffs, understanding changes
 
