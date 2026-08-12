@@ -18,6 +18,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<OrderResponse>> CreateOrder(
         [FromBody] CreateOrderRequest request,
         CancellationToken ct)

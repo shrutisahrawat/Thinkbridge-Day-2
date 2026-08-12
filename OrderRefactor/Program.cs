@@ -84,7 +84,22 @@ builder.Services.AddAuthentication(PolicySchemeName)
         };
     });
 
-builder.Services.AddAuthorization();
+// Add Authorization with Policies
+builder.Services.AddAuthorization(options =>
+{
+    // Policy 1: User must have "admin" claim
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireClaim("admin", "true"));
+    
+    // Policy 2: User can only access their own orders
+    options.AddPolicy("CanEditOwnOrders", policy =>
+        policy.RequireAssertion(context =>
+        {
+            var userEmail = context.User.FindFirst("unique_name")?.Value;
+            var requestUserId = context.Resource as string;
+            return userEmail == requestUserId;
+        }));
+});
 
 var app = builder.Build();
 
