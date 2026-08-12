@@ -199,6 +199,15 @@ $body = @{email="admin@quotes.com"; password="SecurePassword123"} | ConvertTo-Js
 Invoke-WebRequest -Uri "http://localhost:5021/api/auth/login" `
   -Method POST -ContentType "application/json" -Body $body -UseBasicParsing
 ```
+Day 3 — Task 2: Authorization Policies and Claims
+
+✅ Implementation:
+- Added two policies in Program.cs: AdminOnly + CanEditOwnOrders
+- Applied "AdminOnly" policy to CreateOrder endpoint
+- Code: https://github.com/shrutisahrawat/Thinkbridge-Day-2/blob/main/OrderRefactor/Controllers/OrderController.cs
+- Commit: a2d13c8
+
+When POST /api/orders is called without admin claim → 403 Forbidden
 
 
 
