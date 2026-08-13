@@ -2,33 +2,102 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
+    branches: [main]
 
 jobs:
   order-refactor-tests:
     name: OrderRefactor.Tests
     runs-on: ubuntu-latest
+    env:
+      TEST_PROJECT: OrderRefactor.Tests/OrderRefactor.Tests.csproj
+      COVERAGE_THRESHOLD: "20"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet test OrderRefactor.Tests --nologo
+      - run: dotnet restore "$TEST_PROJECT"
+      - run: dotnet build "$TEST_PROJECT" --no-restore
+      - run: >
+          dotnet test "$TEST_PROJECT" --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --collect:"XPlat Code Coverage"
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-order-refactor-tests
+          path: |
+            OrderRefactor.Tests/TestResults/**/*.trx
+            OrderRefactor.Tests/TestResults/**/coverage.cobertura.xml
+      - name: Enforce line coverage threshold
+        run: |
+          COVERAGE_FILE=$(find OrderRefactor.Tests/TestResults -name "coverage.cobertura.xml" | head -n 1)
+          if [ -z "$COVERAGE_FILE" ]; then
+            echo "::error::No coverage.cobertura.xml found"
+            exit 1
+          fi
+          COVERAGE_FILE="$COVERAGE_FILE" python3 <<'PYEOF'
+          import os, sys, xml.etree.ElementTree as ET
+          path = os.environ["COVERAGE_FILE"]
+          threshold = float(os.environ["COVERAGE_THRESHOLD"])
+          rate = float(ET.parse(path).getroot().get("line-rate")) * 100
+          print(f"Line coverage: {rate:.2f}% (threshold: {threshold}%)")
+          if rate < threshold:
+              print(f"::error::Line coverage {rate:.2f}% is below the {threshold}% threshold")
+              sys.exit(1)
+          PYEOF
 
   quotes-tests-unit:
     name: Quotes.Tests.Unit
     runs-on: ubuntu-latest
+    env:
+      TEST_PROJECT: Quotes.Tests.Unit/Quotes.Tests.Unit.csproj
+      COVERAGE_THRESHOLD: "10"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet test Quotes.Tests.Unit --nologo
+      - run: dotnet restore "$TEST_PROJECT"
+      - run: dotnet build "$TEST_PROJECT" --no-restore
+      - run: >
+          dotnet test "$TEST_PROJECT" --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --collect:"XPlat Code Coverage"
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-quotes-tests-unit
+          path: |
+            Quotes.Tests.Unit/TestResults/**/*.trx
+            Quotes.Tests.Unit/TestResults/**/coverage.cobertura.xml
+      - name: Enforce line coverage threshold
+        run: |
+          COVERAGE_FILE=$(find Quotes.Tests.Unit/TestResults -name "coverage.cobertura.xml" | head -n 1)
+          if [ -z "$COVERAGE_FILE" ]; then
+            echo "::error::No coverage.cobertura.xml found"
+            exit 1
+          fi
+          COVERAGE_FILE="$COVERAGE_FILE" python3 <<'PYEOF'
+          import os, sys, xml.etree.ElementTree as ET
+          path = os.environ["COVERAGE_FILE"]
+          threshold = float(os.environ["COVERAGE_THRESHOLD"])
+          rate = float(ET.parse(path).getroot().get("line-rate")) * 100
+          print(f"Line coverage: {rate:.2f}% (threshold: {threshold}%)")
+          if rate < threshold:
+              print(f"::error::Line coverage {rate:.2f}% is below the {threshold}% threshold")
+              sys.exit(1)
+          PYEOF
 
   quotes-tests-integration:
     name: Quotes.Tests.Integration
     runs-on: ubuntu-latest
+    env:
+      TEST_PROJECT: Quotes.Tests.Integration/Quotes.Tests.Integration.csproj
+      COVERAGE_THRESHOLD: "35"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -36,4 +105,34 @@ jobs:
           dotnet-version: '10.0.x'
       # GitHub-hosted ubuntu runners have Docker preinstalled, which Testcontainers needs.
       # First run pulls mcr.microsoft.com/mssql/server:2022-latest (~5 min).
-      - run: dotnet test Quotes.Tests.Integration --nologo
+      - run: dotnet restore "$TEST_PROJECT"
+      - run: dotnet build "$TEST_PROJECT" --no-restore
+      - run: >
+          dotnet test "$TEST_PROJECT" --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --collect:"XPlat Code Coverage"
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-quotes-tests-integration
+          path: |
+            Quotes.Tests.Integration/TestResults/**/*.trx
+            Quotes.Tests.Integration/TestResults/**/coverage.cobertura.xml
+      - name: Enforce line coverage threshold
+        run: |
+          COVERAGE_FILE=$(find Quotes.Tests.Integration/TestResults -name "coverage.cobertura.xml" | head -n 1)
+          if [ -z "$COVERAGE_FILE" ]; then
+            echo "::error::No coverage.cobertura.xml found"
+            exit 1
+          fi
+          COVERAGE_FILE="$COVERAGE_FILE" python3 <<'PYEOF'
+          import os, sys, xml.etree.ElementTree as ET
+          path = os.environ["COVERAGE_FILE"]
+          threshold = float(os.environ["COVERAGE_THRESHOLD"])
+          rate = float(ET.parse(path).getroot().get("line-rate")) * 100
+          print(f"Line coverage: {rate:.2f}% (threshold: {threshold}%)")
+          if rate < threshold:
+              print(f"::error::Line coverage {rate:.2f}% is below the {threshold}% threshold")
+              sys.exit(1)
+          PYEOF
