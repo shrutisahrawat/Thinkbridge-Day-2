@@ -1,6 +1,6 @@
 # Thinkbridge Backend Assignment — Shruti Sahrawat
 
-Days 1–3. All code in this repository. **139 tests passing** across three test projects.
+Days 1–3. All code in this repository. **139 tests passing** across three test projects, green on GitHub Actions.
 
 | Suite | Tests | Runtime |
 |---|---|---|
@@ -59,7 +59,7 @@ An aggregate root that enforces its own invariants: name 3–80 characters, maxi
 Same file. Refresh tokens are stored hashed, never in plaintext ([`Models/RefreshToken.cs`](OrderRefactor/Models/RefreshToken.cs): `TokenHash`, `UserId`, `ExpiresAt`, `RevokedAt`, `ReplacedByToken`). Every refresh rotates the pair and marks the old token replaced. **Presenting an already-rotated token revokes the entire family for that user** and forces re-authentication — so a leaked token cannot be used twice, and the theft is detected rather than silently exploited.
 Proven end-to-end in [`RefreshTokenTests.cs`](OrderRefactor.Tests/RefreshTokenTests.cs): log in, refresh once, replay the spent token → 401, then confirm the legitimate user's current token is dead too.
 
-
+---
 
 ## Day 3 — Enterprise Auth and Testing
 
@@ -74,7 +74,6 @@ iss == "OrderRefactorIssuer"?
 └─ no → EntraJwt Microsoft's public keys, fetched from Authority
 ↓
 [Authorize] resolves as normal — controllers unchanged
-
 Entra configuration (`TenantId`, `ClientId`, `Audience`) lives in `appsettings.json`; these are public identifiers, not secrets. Authority is `https://login.microsoftonline.com/{tenant}/v2.0`. No client secret is needed anywhere — an API that only validates tokens uses Microsoft's published signing keys.
 **Known gap:** the application is registered in Entra and the code path is in place, but I could not obtain a real Entra access token to verify end-to-end. The institutional tenant rejected the `access_as_user` scope grant (`AADSTS65005`). The internal JWT path is verified working; the Entra branch is unverified against a live token.
 
@@ -127,11 +126,4 @@ dotnet test Quotes.Tests.Unit          # 95
 dotnet test Quotes.Tests.Integration   # 23 — requires Docker
 ```
 
-`.github/workflows/ci.yml` runs all three projects as separate jobs.
-**The CI run currently fails.** `actions/checkout` does not fetch submodules by default and this repository was assembled from several, so the runner's checkout is incomplete. All 139 tests pass locally, including the 23 against a real SQL Server 2022 container.
-
-
-
-
-
-
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs all three projects as separate jobs on GitHub Actions. **All three pass**, including the integration job, which starts a real SQL Server 2022 container on the runner via Testcontainers. [Latest run](../../actions).
